@@ -133,7 +133,7 @@ const shellTasks = async (harness: Harness) =>
     (task) => task.record.kind === SHELL_TASK,
   );
 
-// Regression: #PR A full detached quota must not kill an admitted foreground command.
+// Regression: #PR Full quotas preserve foreground completion and abort.
 test("a foreground command completes while the background quota stays full", async () => {
   const { harness, conversation, shells } = await openShellHarness(
     new MemoryStorage(),
@@ -143,9 +143,13 @@ test("a foreground command completes while the background quota stays full", asy
     },
   );
   try {
+    const releaseSlot = join(root, "quota-release-slot");
     const started = await run(
       conversation,
-      { command: "sleep 30", background: true },
+      {
+        command: `while [ ! -f ${releaseSlot} ]; do sleep 0.01; done; echo slot-released`,
+        background: true,
+      },
       "occupy-slot",
     );
     const pgid = pgidOf(started);
@@ -189,13 +193,60 @@ test("a foreground command completes while the background quota stays full", asy
       "quota-blocked foreground group to stop",
     );
     expect(groupMembers(pgid).length).toBeGreaterThan(0);
+    const waitingFile = join(root, "quota-awaiting-slot");
+    const finishFile = join(root, "quota-detached-finish");
+    const handoff = run(
+      conversation,
+      {
+        command: `sleep 0.2; touch ${waitingFile}; while [ ! -f ${finishFile} ]; do sleep 0.01; done; echo detached-finished`,
+      },
+      "detach-after-release",
+    );
+    await until(() => {
+      try {
+        return readFileSync(waitingFile, "utf8") === "";
+      } catch {
+        return false;
+      }
+    }, "second quota-blocked foreground to pass its window");
+    expect(groupMembers(pgid).length).toBeGreaterThan(0);
+    writeFileSync(releaseSlot, "");
+    const detached = await handoff;
+    expect(detached).toContain("backgrounded as shell");
+    const detachedId = /shell `([^`]+)`/.exec(detached)![1]!;
+    const detachedPgid = pgidOf(detached);
+    expect(groupMembers(detachedPgid).length).toBeGreaterThan(0);
+    await until(async () => {
+      const tasks = await shellTasks(harness);
+      return (
+        tasks.length === 1 &&
+        (tasks[0]!.record.input as { shellId: string }).shellId === detachedId
+      );
+    }, "released slot to belong only to the newly detached command");
+    writeFileSync(finishFile, "");
+    await until(
+      async () =>
+        (await userTexts(conversation)).some(
+          (text) =>
+            text.includes(`Shell \`${detachedId}\``) &&
+            text.includes("detached-finished") &&
+            text.includes("exited 0"),
+        ),
+      "detached command completion notification",
+    );
+    await until(
+      async () =>
+        groupMembers(detachedPgid).length === 0 &&
+        (await shellTasks(harness)).length === 0,
+      "detached completion to release ownership and its process group",
+    );
   } finally {
     await harness.close(context);
     await shells.shutdown();
   }
 });
 
-// Regression: #PR Long-line trimming must retain suffixes and identify the full log.
+// Regression: #PR Long lines retain suffixes and full-log recovery.
 test("a foreground long line keeps its tail and full-log recovery hint", async () => {
   const { harness, conversation, shells } = await openShellHarness(
     new MemoryStorage(),
@@ -679,7 +730,7 @@ test("a reap-style abort stops background shells", async () => {
   await shells.shutdown();
 });
 
-// Regression: #PR Restart notices retain cleanup and require checking effects before rerun.
+// Regression: #PR Restart recovery warns to inspect effects before retry.
 test("a resumed shell task verifies the recorded identity: a reused pid is never signaled", async () => {
   const db = join(root, "identity.sqlite");
   const first = await openShellHarness(
