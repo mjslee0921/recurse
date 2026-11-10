@@ -138,8 +138,7 @@ test("owned instruction sections match a recorded fresh Durable request", async 
   }
 });
 
-// Feature: #2838 tree memories follow current parents in captured provider requests.
-// Feature: #1 Captured requests include plain-English communication guidance.
+// Feature: #2838 Tree memory and shared guidance reach captured requests.
 test("tree memory is shared within the current tree only", async () => {
   const world = await switchoverWorld();
   const data = join(world.root, "data");
