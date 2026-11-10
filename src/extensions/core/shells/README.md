@@ -19,10 +19,15 @@ its former extension entry and terminal UI are removed.
   reminder delay; `0` disables it for this shell.
 - `limit` (default `2000`, range `1`–`2000`): maximum output lines shown.
 
-A foreground command waits up to 10 seconds. If it finishes, the result includes
-its exit code and trimmed output; otherwise it becomes a background shell and
-returns its id, process information, log path, and output so far. Background
-and monitor calls skip that foreground wait.
+A foreground command waits 10 seconds before attempting to become a background
+shell. If it finishes, the result includes its exit code and trimmed output;
+otherwise, when a background slot is available, it returns its id, process
+information, log path, and output so far. At the background cap it stays in the
+foreground, streaming output and remaining abortable until it finishes or a slot
+opens; quota pressure never stops an already-started foreground command.
+Background and monitor calls skip that foreground wait and are refused before
+launch when the quota is full. A background handoff asks the agent to continue
+useful independent work, or wait when none remains.
 
 Each command runs in its own detached process group. Stdout and stderr share a
 log file, so output remains available after a trimmed tool result. Log-directory
@@ -64,7 +69,8 @@ notifications.
 
 Tool output is middle-trimmed to at most 2000 lines and 50 KiB by default,
 retaining head and tail with an omission marker and a Read offset/limit hint.
-Lines longer than 500 characters are shortened. Trimming reads bounded windows
+Lines longer than 500 characters retain their head and tail with a full-log path
+and original-line Read hint, even when no whole lines are omitted. Trimming reads bounded windows
 from the log rather than loading the whole file; the full log is unchanged.
 Log stats and reads are asynchronous. Poll ticks coalesce while a read is pending;
 foreground output and monitor completion drain a final window before delivery.
@@ -124,7 +130,10 @@ transcript or the former Pi-extension completion-batch protocol.
 - A task retains ownership until cleanup is proven. Failed stops retry with
   backoff; an abort that cannot prove cleanup hands ownership to a successor task.
 - After a host restart, a resumed task stops its recorded surviving group and
-  reports that the command stopped because the server restarted. Interrupted bash
+  reports that the command stopped because the server restarted. The notice links
+  the retained log and asks the agent to inspect effects before deciding whether
+  to rerun: unknown exit status does not imply the command did no work. Recovery
+  never retries commands automatically. Interrupted bash
   calls are recovered from the registry store and a launch id memoized before
   spawn and inherited in the shell environment.
 

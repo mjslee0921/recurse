@@ -234,7 +234,7 @@ function lostText(input: ShellInput, gone: boolean): string {
   const tail = gone
     ? ""
     : ` Its process group could not be proven gone; stop it with kill -- -${input.pgid}.`;
-  return `${head}${tail}\nLog: ${input.logPath}`;
+  return `${head}${tail}\nLog: ${input.logPath}\nRead the log and check the command's effects before deciding whether to rerun it; it may have partially or fully completed. Do not retry blindly.`;
 }
 
 /** Resolve at `until`, on wake(), or reject when the invocation is signaled. */
@@ -770,7 +770,7 @@ export function createShells(host: ShellsOptions) {
         }
       };
       const pgid = String(shell.pgid);
-      const handoff = `Output trimmed to 2000 lines/50KB (middle-truncated); full log: ${shell.logPath} — Read with offset/limit to continue. End your message; you will be notified when done.\nStop it (whole group): \`kill -- -${pgid}\``;
+      const handoff = `Output trimmed to 2000 lines/50KB (middle-truncated); full log: ${shell.logPath} — Read with offset/limit to continue. Continue useful independent work; otherwise wait for notification or use wait.\nStop it (whole group): \`kill -- -${pgid}\``;
       const othersReminder = () => {
         const reminder = registry.backgroundShellReminder(shell.id);
         return reminder ? `\n${reminder}` : "";
@@ -821,10 +821,21 @@ export function createShells(host: ShellsOptions) {
       const timer = setInterval(stream, 100);
       let waited: "exited" | "timeout";
       try {
-        waited = await registry.waitForExit(
-          shell,
-          registry.cfg.foregroundWaitMs,
-        );
+        for (;;) {
+          waited = await registry.waitForExit(
+            shell,
+            registry.cfg.foregroundWaitMs,
+          );
+          if (waited === "exited" || shell.completed) break;
+          if (!owner) break;
+          if (!registry.canBackgroundify(shell)) continue;
+          // Invariant: Keep quota-blocked commands foreground and abortable;
+          // watch before transition so a detached completion cannot be lost.
+          watch(registry, shell);
+          const backgrounded = registry.backgroundify(shell, 0);
+          if (backgrounded) break;
+          unwatch(shell.id);
+        }
       } finally {
         clearInterval(timer);
         await streaming;
@@ -834,6 +845,7 @@ export function createShells(host: ShellsOptions) {
       if (shell.completed) waited = "exited";
       const seconds = Math.round(registry.cfg.foregroundWaitMs / 1000);
       if (waited === "exited") {
+        unwatch(shell.id);
         await registry.flushPersistence(shell);
         const out = await registry.trimmedOutput(shell, args.limit);
         if (shell.status !== "killed" && shell.exitCode === 0)
@@ -844,26 +856,10 @@ export function createShells(host: ShellsOptions) {
             : `exited ${shell.exitCode}`;
         return result(`Command ${status}.\n${out}`);
       }
-      const capFull = async () => {
-        const recovery = registry.liveShellCapMessage();
-        const out = await registry.trimmedOutput(shell, args.limit);
-        const stopped = await registry.discardUnowned(shell);
-        return result(
-          `Command still running after ${seconds}s, but the live background-shell limit is full; it was not backgrounded. ${stopped ? "The command was stopped." : "Forced termination remains pending."}\n${recovery}\nOutput so far:\n${out}`,
-        );
-      };
-      if (!registry.canBackgroundify(shell)) return capFull();
       if (!owner)
         return refuse(
           "Command exceeded the foreground window, but its process identity is unreadable",
         );
-      // Invariant: Watch before backgrounding; the registry emits exit only
-      // once.
-      watch(registry, shell);
-      if (!registry.backgroundify(shell, 0)) {
-        unwatch(shell.id);
-        return capFull();
-      }
       if (!(await detach()))
         return refuse(
           "Command exceeded the foreground window, but its shell task could not be recorded",
