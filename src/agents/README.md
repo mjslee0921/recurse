@@ -47,9 +47,16 @@ work while answers or background tasks are pending. Existing authorization stays
 within its original scope; required approvals and safety review still apply.
 The policy discourages repeated successful checks without new evidence and asks
 for results, verification and concrete blockers at completion. It does not add
-a retry loop or infer task success from an assistant's final message. Replies,
-inter-agent messages and pull requests use plain English and clear sentences,
-rather than shorthand or unexplained jargon.
+a retry loop or infer task success from an assistant's final message.
+
+## Communication guidance
+
+[runtime/prompts.ts](runtime/prompts.ts) instructs agents to write replies,
+progress updates, inter-agent messages and pull requests in plain English
+sentences with normal spacing and punctuation, not joined words, compressed
+shorthand or unexplained abbreviations. Results and their meaning come first;
+necessary technical terms are explained, and exact paths and identifiers stay
+separate from the explanation.
 
 ## Lifecycle
 

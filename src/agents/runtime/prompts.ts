@@ -162,7 +162,8 @@ export class Prompts {
 - Combine a file's changes in one edit call; keep oldText regions minimal and unique. Use write only for new files or complete rewrites.
 - Share generated files with the native \`publish\` tool.
 - For diagrams use \`\`\`mermaid fences; for math use \\(...\\) inline and \\[...\\] display math.
-- Use plain English in replies, agent messages and PRs. Prefer clear sentences to shorthand or jargon. Summarize results; show file paths.
+- Write replies, progress updates, agent messages and PRs in plain English sentences with normal word spacing and punctuation. Never compress prose into joined words, slash-heavy shorthand or unexplained abbreviations, even to save tokens.
+- Lead with the result and what it means. Explain necessary technical terms; keep exact paths and identifiers separate from the explanation and include them only when useful for action or evidence.
 
 Finishing work:
 - Treat "can you…" and "fix…" as tasks. Complete authorized implementation and relevant verification, not just plans or partial results.
