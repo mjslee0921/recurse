@@ -697,8 +697,8 @@ test("Durable delivery persists only unique operator admission times", async () 
   expect(faux.state.callCount).toBe(5);
 });
 
-// Feature: #2867 a child's report waits for its working subagents and wakes the parent once.
-test("a child's report waits while its subagents work, then wakes the parent once", async () => {
+// Feature: #2867 Child reports wait for working subagents before delivery.
+test("child reports wait for subagents and preserve every result in order", async () => {
   const { root, env } = await world();
   seedPiModelList(join(root, "data", "config"));
   const logStart = logs.length;
@@ -776,17 +776,20 @@ test("a child's report waits while its subagents work, then wakes the parent onc
     }
     return instance.durable.runningCount() === 0;
   };
-  const onlyReport = async (f: Awaited<ReturnType<typeof family>>) => {
+  const expectReports = async (
+    f: Awaited<ReturnType<typeof family>>,
+    expected: string[],
+  ) => {
     await durableUntil(
       async () => (await reports(f.parent, f.child)).length > 0,
     );
     await durableUntil(() => quiet(f.parent, f.child, f.grandchild));
-    const sent = await reports(f.parent, f.child);
-    expect(sent).toHaveLength(1);
-    return sent[0];
+    expect(await reports(f.parent, f.child)).toEqual(expected);
+    await durableUntil(() => quiet(f.parent, f.child, f.grandchild));
+    expect(await reports(f.parent, f.child)).toEqual(expected);
   };
-  const afterGrandchild =
-    "(turn started by an agent message; received 1 from you; 1 earlier turn ended)\nchild reply";
+  const childReply = "(turn started by your message)\nchild reply";
+  const afterGrandchild = "(turn started by an agent message)\nchild reply";
   try {
     const a = await family("finish");
     const [g1, c1] = [gate("g1"), gate("c1")];
@@ -801,9 +804,10 @@ test("a child's report waits while its subagents work, then wakes the parent onc
     await durableUntil(() => heldLog(a.child));
     expect(await reports(a.parent, a.child)).toEqual([]);
     g1.release();
-    expect(await onlyReport(a)).toBe(
-      "(turn started by an agent message; received 1 operator, 2 from you, 1 agent; 1 earlier turn ended)\nchild reply",
-    );
+    await expectReports(a, [
+      "(turn started by your message; received 1 operator, 1 from you, 1 agent)\nchild reply",
+      afterGrandchild,
+    ]);
 
     for (const end of ["error", "abort", "delete"] as const) {
       const f = await family(end);
@@ -825,16 +829,14 @@ test("a child's report waits while its subagents work, then wakes the parent onc
       if (end === "abort")
         expect(await instance.durable.stop(f.grandchild)).toBe(true);
       if (end === "delete") await instance.reap.requestReap(f.grandchild, null);
-      expect(await onlyReport(f)).toBe(afterGrandchild);
+      await expectReports(f, [childReply, afterGrandchild]);
     }
 
     const s = await family("shell");
     const opened = await instance.durable.open(s.grandchild);
     await setSafetyReviewOff(opened.conversation, true, BACKGROUND_CONTEXT);
     await send(s.grandchild, "SHELL", s.child);
-    expect(await onlyReport(s)).toBe(
-      "(turn started by an agent message)\nchild reply",
-    );
+    await expectReports(s, [afterGrandchild]);
     expect(instance.durable.shells(s.grandchild).active_count).toBe(1);
     expect(heldLog(s.child)).toBe(false);
 
@@ -852,7 +854,7 @@ test("a child's report waits while its subagents work, then wakes the parent onc
     await durableUntil(() => heldLog(r.child, from));
     expect(await reports(r.parent, r.child)).toEqual([]);
     resumed.release();
-    expect(await onlyReport(r)).toBe(afterGrandchild);
+    await expectReports(r, [childReply, afterGrandchild]);
   } finally {
     for (const step of gates.values()) step.release();
     await instance.shutdown();
