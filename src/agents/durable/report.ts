@@ -317,6 +317,7 @@ export class Reporter {
           at = Number(record.id);
           continue;
         }
+        if (!settled(record)) queued = true;
         const continuation =
           record.entry !== undefined &&
           (await this.entry(Number(record.entry))).byTask;
