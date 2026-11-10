@@ -139,6 +139,7 @@ test("owned instruction sections match a recorded fresh Durable request", async 
 });
 
 // Feature: #2838 tree memories follow current parents in captured provider requests.
+// Feature: #1 Captured requests include plain-English communication guidance.
 test("tree memory is shared within the current tree only", async () => {
   const world = await switchoverWorld();
   const data = join(world.root, "data");
@@ -202,6 +203,15 @@ test("tree memory is shared within the current tree only", async () => {
       const request = captured.request as {
         context: { messages: Array<{ sections?: Record<string, string> }> };
       };
+      const preamble = request.context.messages
+        .flatMap((message) =>
+          message.sections?.preamble ? [message.sections.preamble] : [],
+        )
+        .at(-1)!;
+      expect(preamble).toContain(
+        "plain English in replies, agent messages and PRs",
+      );
+      expect(preamble).toContain("Compaction does not end the task");
       const declarations = request.context.messages
         .flatMap((message) =>
           message.sections?.codemode ? [message.sections.codemode] : [],

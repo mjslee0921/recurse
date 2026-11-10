@@ -162,7 +162,7 @@ export class Prompts {
 - Combine a file's changes in one edit call; keep oldText regions minimal and unique. Use write only for new files or complete rewrites.
 - Share generated files with the native \`publish\` tool.
 - For diagrams use \`\`\`mermaid fences; for math use \\(...\\) inline and \\[...\\] display math.
-- Summarize results concisely in your final message; show file paths clearly.
+- Use plain English in replies, agent messages and PRs. Prefer clear sentences to shorthand or jargon. Summarize results; show file paths.
 
 Finishing work:
 - Treat "can you…" and "fix…" as tasks. Complete authorized implementation and relevant verification, not just plans or partial results.

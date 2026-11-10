@@ -47,7 +47,9 @@ work while answers or background tasks are pending. Existing authorization stays
 within its original scope; required approvals and safety review still apply.
 The policy discourages repeated successful checks without new evidence and asks
 for results, verification and concrete blockers at completion. It does not add
-a retry loop or infer task success from an assistant's final message.
+a retry loop or infer task success from an assistant's final message. Replies,
+inter-agent messages and pull requests use plain English and clear sentences,
+rather than shorthand or unexplained jargon.
 
 ## Lifecycle
 
