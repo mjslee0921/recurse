@@ -38,6 +38,17 @@ dismiss; Recurse does not infer delivery from Pi history or promise exactly-once
 delivery. See [runtime/agent_node.ts](runtime/agent_node.ts) and
 [reconciler.ts](reconciler.ts).
 
+## Completion guidance
+
+[runtime/prompts.ts](runtime/prompts.ts) supplies the shared completion policy:
+carry authorized work through implementation and relevant verification, preserve
+the active objective across steering and compaction, and continue independent
+work while answers or background tasks are pending. Existing authorization stays
+within its original scope; required approvals and safety review still apply.
+The policy discourages repeated successful checks without new evidence and asks
+for results, verification and concrete blockers at completion. It does not add
+a retry loop or infer task success from an assistant's final message.
+
 ## Lifecycle
 
 Stop, clear and compact have distinct ordering boundaries. Deletion fences
