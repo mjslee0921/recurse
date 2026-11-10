@@ -133,7 +133,7 @@ const shellTasks = async (harness: Harness) =>
     (task) => task.record.kind === SHELL_TASK,
   );
 
-// Regression: #PR Full quotas preserve foreground completion and abort.
+// Regression: #1 Full quotas preserve foreground completion and abort.
 test("a foreground command completes while the background quota stays full", async () => {
   const { harness, conversation, shells } = await openShellHarness(
     new MemoryStorage(),
@@ -246,7 +246,7 @@ test("a foreground command completes while the background quota stays full", asy
   }
 });
 
-// Regression: #PR Long lines retain suffixes and full-log recovery.
+// Regression: #1 Long lines retain suffixes and full-log recovery.
 test("a foreground long line keeps its tail and full-log recovery hint", async () => {
   const { harness, conversation, shells } = await openShellHarness(
     new MemoryStorage(),
@@ -730,7 +730,7 @@ test("a reap-style abort stops background shells", async () => {
   await shells.shutdown();
 });
 
-// Regression: #PR Restart recovery warns to inspect effects before retry.
+// Regression: #1 Restart recovery warns to inspect effects before retry.
 test("a resumed shell task verifies the recorded identity: a reused pid is never signaled", async () => {
   const db = join(root, "identity.sqlite");
   const first = await openShellHarness(
