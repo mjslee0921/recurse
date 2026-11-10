@@ -38,6 +38,15 @@ dismiss; Recurse does not infer delivery from Pi history or promise exactly-once
 delivery. See [runtime/agent_node.ts](runtime/agent_node.ts) and
 [reconciler.ts](reconciler.ts).
 
+## Communication guidance
+
+[runtime/prompts.ts](runtime/prompts.ts) instructs agents to write replies,
+progress updates, inter-agent messages and pull requests in plain English
+sentences with normal spacing and punctuation, not joined words, compressed
+shorthand or unexplained abbreviations. Results and their meaning come first;
+necessary technical terms are explained, and exact paths and identifiers stay
+separate from the explanation.
+
 ## Lifecycle
 
 Stop, clear and compact have distinct ordering boundaries. Deletion fences
