@@ -217,6 +217,7 @@ export const disclosuresTests: BrowserTest[] = [
       await context.close();
     }
   },
+  // Regression: #7 dollar equations render without consuming currency or code.
   async function test_katex_finalizes_after_message_sanitization(
     browser,
     base,
@@ -239,24 +240,30 @@ Long expression:
 ${longTex}
 \]
 
+Dollar inline: $x^2$ and $2+2=4$. Mid-paragraph display: $$y=\frac{1}{2}$$ ends here.
+
+$$z=3$$
+
+$$
+\sum_{i=1}^{n} i=\frac{n(n+1)}{2}
+$$
+
+Currency: $5 and $10. Escaped: \$x\$ and \$\$y\$\$. Boundaries: $ x$ and $x $ and $x$2.
+
+${"Code: `$x$` and `$$y$$`.\n\n```tex\n$x$\n$$y$$\n\\(z\\)\n```"}
+
+Unsafe link: $\href{javascript:alert(1)}{unsafe}$.
+
 So yes, it’s effectively a **sigmoid-like decay parameterization**. The meaningful change in your proposal is making it **data-dependent**, not choosing sigmoid versus exponential.
 
 <span data-forged-katex class="katex" style="height:500em">forged CSS</span>
 <span data-forged-placeholder data-math-placeholder="not-json"></span>
 <span data-malformed-math data-math-placeholder='{"tex":"{","displayMode":false,"raw":"literal fallback"}'></span>
-<code data-code-placeholder data-math-placeholder="not-json">code payload</code>`;
-    const thread = {
-      id: "main",
-      title: "KaTeX finalization",
-      parent: null,
-      status: "idle",
-      active_run: null,
-      kind: null,
-      msg_count: 2,
-      window_cursor: 0,
-      turns: [turn("katex-finalization", "Explain the distinction.", reply)],
-      draft: null,
-    };
+<code data-code-placeholder data-math-placeholder="not-json">code payload</code>
+
+Streaming opener: $unfinished
+
+Streaming display opener: $$unfinished`;
     for (const [viewport, mobile] of [
       [{ width: 390, height: 844 }, true],
       [{ width: 1280, height: 800 }, false],
@@ -269,12 +276,24 @@ So yes, it’s effectively a **sigmoid-like decay parameterization**. The meanin
       try {
         const page = await context.newPage();
         const errors = captureErrors(page);
-        await mockConversation(page, base, "main", () => thread);
-        await gotoRoot(page, base);
-        await page.locator(".msg.assistant .content").waitFor();
-        await page.waitForFunction(
-          "document.querySelectorAll('.katex-display').length === 3",
+        const seeded = await page.request.post(
+          `${base}__browser-test/seed-math`,
+          {
+            data: { reply },
+          },
         );
+        expect(seeded.ok()).toBeTrue();
+        const { agent } = await seeded.json();
+        await page.goto(`${base}#agent=${agent}`);
+        await page.locator("#input").fill("Explain the distinction.");
+        await page.locator("#send").click();
+        await page
+          .getByText("Streaming display opener: $$unfinished", { exact: true })
+          .waitFor();
+        await page.waitForFunction(
+          "document.querySelectorAll('.katex-display').length === 6",
+        );
+        await page.evaluate(() => document.fonts.ready);
         const bounds = await page
           .locator(".katex-display")
           .evaluateAll((elements) =>
@@ -329,18 +348,36 @@ So yes, it’s effectively a **sigmoid-like decay parameterization**. The meanin
               };
             }),
           );
-        expect(bounds).toHaveLength(3);
+        expect(bounds).toHaveLength(6);
+        expect(await page.locator(".katex").count()).toBe(10);
+        expect(await page.locator(".katex-display .mfrac").count()).toBe(2);
+        expect(await page.locator(".katex a").count()).toBe(0);
+        expect(await page.locator(".katex").last().innerText()).toContain(
+          "\\href",
+        );
+        expect(await page.locator(".content code .katex").count()).toBe(0);
+        expect(await page.locator(".content pre code").innerText()).toBe(
+          "$x$\n$$y$$\n\\(z\\)\n",
+        );
+        expect(await page.locator(".content code").allTextContents()).toContain(
+          "$x$",
+        );
+        expect(await page.locator(".content code").allTextContents()).toContain(
+          "$$y$$",
+        );
         expect(
-          bounds.every(
+          bounds.filter(
             (item: any) =>
-              item.overflowX === "auto" &&
-              item.extremes[0].scrollLeft === 0 &&
-              item.extremes[1].scrollLeft === item.maxScroll &&
-              item.extremes[0].horizontalStartVisible &&
-              item.extremes[1].horizontalEndVisible &&
-              item.extremes.every((extreme: any) => extreme.verticalVisible),
+              !(
+                item.overflowX === "auto" &&
+                item.extremes[0].scrollLeft === 0 &&
+                item.extremes[1].scrollLeft === item.maxScroll &&
+                item.extremes[0].horizontalStartVisible &&
+                item.extremes[1].horizontalEndVisible &&
+                item.extremes.every((extreme: any) => extreme.verticalVisible)
+              ),
           ),
-        ).toBe(true);
+        ).toEqual([]);
         expect(bounds.some((item: any) => item.maxScroll > 1)).toBe(true);
         const forged = page.locator("[data-forged-katex]");
         expect(await forged.count()).toBe(0);
@@ -351,6 +388,11 @@ So yes, it’s effectively a **sigmoid-like decay parameterization**. The meanin
         const content = await page
           .locator(".msg.assistant .content")
           .innerText();
+        expect(content).toContain("Currency: $5 and $10.");
+        expect(content).toContain("Escaped: $x$ and $$y$$.");
+        expect(content).toContain("Boundaries: $ x$ and $x $ and $x$2.");
+        expect(content).toContain("Streaming opener: $unfinished");
+        expect(content).toContain("Streaming display opener: $$unfinished");
         expect(content).toContain(
           '<span data-forged-katex class="katex" style="height:500em">forged CSS</span>',
         );
