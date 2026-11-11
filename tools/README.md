@@ -30,16 +30,18 @@ internal tool routes that may change in any release. Scripts should use the
 [API v1 contract](../src/web/api_v1/README.md) instead. The marker does not
 replace authentication or grant access to operator-only routes.
 
-## Readable task assignments and messages
+## Human-readable agent communication
 
-The injected `subagent.ts` help tells agents to write task assignments and
-messages in the same ordinary English they use with the operator. Compressed
-memory notes are source material, not a message format. Before `create` or
-`send`, agents rewrite fragments and joined words or numbers into sentences,
-lead with the request or result, and separate long paths and hashes into a
-labelled list. The help includes a concrete before-and-after example. This is
-model guidance, not a language detector or a guarantee of compliance; delivery
-does not rewrite or discard message content.
+The injected `subagent.ts` help explicitly tells both parent and child agents
+that humans read their task assignments and messages, and requires clear
+sentences and spaces between words and numbers. The shared prompt repeats that
+requirement beside automatic final-report delivery. Compressed memory notes are
+source material, not a message format. Before `create` or `send`, agents rewrite
+fragments and joined words or numbers into sentences, lead with the request or
+result, and separate long paths and hashes into a labelled list. The help
+includes a concrete before-and-after example. This is model guidance, not a
+language detector or a guarantee of compliance; delivery does not rewrite or
+discard message content. Exact paths, identifiers and code remain unchanged.
 
 ## Operator-controlled agents
 

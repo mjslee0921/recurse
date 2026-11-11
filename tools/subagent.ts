@@ -9,8 +9,9 @@
  *     aren't reported to you. --remote: top-level on a connected backend;
  *     returns id@label and sends no report back.
  * send <id|id@label> [--interrupt] "<message>"
- *     For create/send, write operator-readable English, not compressed memory notes.
- *     Before sending, rewrite fragments and joined words/numbers into sentences:
+ *     Humans read agent messages too. Parent and child agents must use clear
+ *     sentences and proper spaces between words and numbers in create/send text.
+ *     Use ordinary English, not compressed memory notes. Before sending, rewrite:
  *     "all47RUNNING by15:56" becomes "All 47 jobs were running by 15:56 UTC."
  *     Lead with the request or result; put long paths/hashes in a labelled list.
  *     Waits until delivered, queued, failed or not confirmed; an idle agent

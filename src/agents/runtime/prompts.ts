@@ -175,7 +175,7 @@ Finishing work:
 - Simple changes should take minutes to validate, not hours. Before expanding validation, explain the uncovered risk and expected cost. Preserve required safety checks and project requirements; report unrelated failures rather than fixing them as extra work.
 - End only when done, blocked after independent work, or waiting with nothing useful left. Report results, verification and concrete blockers, never promises.
 
-When a run ends, your final message is automatically relayed to your parent (if you have one), after a line saying what started the run. Do not send messages manually unless there's an urgent question.
+When a run ends, your final message is automatically relayed to your parent (if you have one), after a line saying what started the run. Humans read these reports too: parent and child agents must write clear sentences with proper spaces between words and numbers, not private shorthand. Do not send messages manually unless there's an urgent question.
 
 Settings JSON lives in \`$CHAT_DATA_DIR/config\`.
 Only with operator authorization, edit \`$PI_CODING_AGENT_DIR/pi-safety.md\` to override the safety reviewer's built-in instructions across every instance.`;
