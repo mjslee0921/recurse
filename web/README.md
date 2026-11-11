@@ -132,6 +132,20 @@ Desktop, tablet and embedded navigation are unchanged. A vertical touch drag
 on the phone thread closes the keyboard without changing the draft or caret;
 composer gestures, mouse scrolling and automatic thread movement keep focus.
 
+## Chat math
+
+[math.ts](math.ts) renders TeX with KaTeX using `\(…\)` or `$…$` for inline
+math and `\[…\]` or `$$…$$` for display math. Display math can appear inside a
+paragraph or span multiple lines. Display equations scroll horizontally when needed,
+with vertical padding to keep fraction glyphs visible. Code spans and fenced code remain literal.
+Single-dollar math stays on one line, cannot cross a backtick, requires non-whitespace
+next to both delimiters, and cannot have a digit immediately after its closing
+dollar. This keeps ordinary currency such as `$5 and $10` literal while allowing
+numeric equations such as `$2+2=4$`. Ambiguous text such as `$5$` is math; escape
+dollars as `\$` or use backslash delimiters to make the intent explicit. Unmatched
+delimiters remain literal while a reply streams. Parsing and rendering are bounded,
+and KaTeX does not trust commands that enable links or HTML.
+
 ## HTTP and browser capabilities
 
 The app supports plain HTTP origins as well as HTTPS. Copy actions share

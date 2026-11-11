@@ -138,7 +138,15 @@ function closingDelimiter(
     start + CLOSE_SCAN_LIMIT,
   );
   for (let i = start; i <= limit; i++) {
-    if (source.startsWith(close, i) && !isEscaped(source, i)) return i;
+    if (close === "$" && (source[i] === "\n" || source[i] === "`")) return -1;
+    if (source.startsWith(close, i) && !isEscaped(source, i)) {
+      if (
+        close === "$" &&
+        (/\s/.test(source[i - 1]) || /[\d$]/.test(source[i + 1] ?? ""))
+      )
+        return -1;
+      return i;
+    }
   }
   return -1;
 }
@@ -158,9 +166,13 @@ function inlineMath(src: string): MathToken | undefined {
     ? "\\("
     : src.startsWith("\\[")
       ? "\\["
-      : undefined;
+      : src.startsWith("$$")
+        ? "$$"
+        : src.startsWith("$") && !/\s/.test(src[1] ?? " ")
+          ? "$"
+          : undefined;
   if (!opener) return undefined;
-  const close = opener === "\\(" ? "\\)" : "\\]";
+  const close = opener === "\\(" ? "\\)" : opener === "\\[" ? "\\]" : opener;
   const end = closingDelimiter(src, opener.length, close);
   if (end < 0) return literal(opener);
   const raw = src.slice(0, end + close.length);
@@ -170,15 +182,16 @@ function inlineMath(src: string): MathToken | undefined {
     type: "math-inline",
     raw,
     text,
-    displayMode: opener === "\\[",
+    displayMode: opener === "\\[" || opener === "$$",
   };
 }
 
 function blockMath(src: string): MathToken | undefined {
-  const opener = /^ {0,3}\\\[/.exec(src);
+  const opener = /^ {0,3}(\\\[|\$\$)/.exec(src);
   if (!opener) return undefined;
   const start = opener[0].length;
-  const end = closingDelimiter(src, start, "\\]");
+  const close = opener[1] === "$$" ? "$$" : "\\]";
+  const end = closingDelimiter(src, start, close);
   if (end < 0) return undefined;
   const text = src.slice(start, end);
   if (text.length > MAX_TEX_LENGTH) return undefined;
@@ -193,10 +206,10 @@ function blockMath(src: string): MathToken | undefined {
 }
 
 function findInlineStart(src: string): number | undefined {
-  for (let i = 0; i < src.length - 1; i++) {
+  for (let i = 0; i < src.length; i++) {
     if (
-      src[i] === "\\" &&
-      (src[i + 1] === "(" || src[i + 1] === "[") &&
+      (src[i] === "$" ||
+        (src[i] === "\\" && (src[i + 1] === "(" || src[i + 1] === "["))) &&
       !isEscaped(src, i)
     )
       return i;
@@ -205,7 +218,7 @@ function findInlineStart(src: string): number | undefined {
 }
 
 function findBlockStart(src: string): number | undefined {
-  return /^ {0,3}\\\[/m.exec(src)?.index;
+  return /^ {0,3}(?:\\\[|\$\$)/m.exec(src)?.index;
 }
 
 export function renderMath(
