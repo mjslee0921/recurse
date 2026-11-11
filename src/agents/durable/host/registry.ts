@@ -449,20 +449,25 @@ export function installHooks(
   };
   const codex = rt.createCodex({ models: tools.context.models });
   const { transforms } = tools;
+  const byId = async (id: Conversation["id"]) =>
+    target.followed.get(String(id)) ??
+    (await target.harness!.conversation(id, context)) ??
+    target.conversation!;
   const prompt = rt.createPromptExtension(
     async (input) => ({
       ...(await host.deps.promptSnapshot(
         host.deps.load(owner(target, input.conversationId)) ?? conv,
         input.env?.cwd ?? input.agent.cwd ?? cwd,
       )),
+      safety_review_off: await rt.safetyReviewOff(
+        target.harness!,
+        await byId(input.conversationId),
+        context,
+      ),
       mcp_servers: await mcp.section(),
     }),
     cid,
   );
-  const byId = async (id: Conversation["id"]) =>
-    target.followed.get(String(id)) ??
-    (await target.harness!.conversation(id, context)) ??
-    target.conversation!;
   registry.install(rt.refusalsExtension(byId));
   for (const extra of [
     tools.search,
