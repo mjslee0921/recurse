@@ -23,22 +23,29 @@ ebetica/recurse; see [How Recurse is developed](../develop.md#how-recurse-is-dev
 
 ## Evidence and review
 
-Classify the work before starting and state the tier in the PR; get feedback if
-the final diff changes it. Exact operator directives override blast radius,
-uncertainty, and expected size.
+Classify the work by the behavior and risk it changes, not line count. State the
+tier and selected checks in the PR. Exact operator directives take precedence.
 
-- Focused or doc-only, roughly 50 lines: consistency plus the relevant targeted
-  test, build, type or browser check; no independent reviewer.
-- Small, roughly up to 250 lines: targeted tests and one review.
-- Large, high-risk or cross-cutting (especially auth/security, storage, process
-  lifecycle, install/startup, or build): the full local suite, clean cumulative
-  integration evidence, and one review. Launch/install changes also need the
-  [install smoke test](../develop.md#testing-install-changes).
+- Prompt-only or documentation: consistency and rendered-prompt inspection when
+  relevant; no test suite or independent reviewer.
+- Routine implementation: the smallest relevant regression test and applicable
+  formatting/type checks; no automatic independent review or full-suite run.
+- High-risk changes (auth/security, storage, process lifecycle, install/startup
+  or build): affected integration checks and one independent review. Launch and
+  install changes also need the [install smoke test](../develop.md#testing-install-changes).
+  Run the full suite only for a named cross-cutting risk that targeted checks
+  cannot cover, or an explicit operator request.
 
-Implementers commission the review, fix findings, and report verdicts. Re-review
-only after substantive changes; escalate reviews still failing after fixes.
-Reviewers review only the requested diff. Prompt-only changes (AGENTS.md,
-generated prompts, help/JSDoc) need no tests. Prove mechanisms (for example, the
+Choose the checks before running them; stop when they pass. Reuse passing
+results unless subsequent edits affect the tested behavior. Do not add review
+rounds, audits, benchmarks or production-scale validation for confidence alone.
+Before expanding validation, state the uncovered risk and expected cost; simple
+changes should take minutes to validate, not hours. Required safety checks and
+explicit project requirements still apply.
+
+When review is required, implementers commission one review and fix its findings.
+Re-review only the substantive fixes, not the whole implementation again.
+Reviewers stay within the requested diff. Prove mechanisms (for example, the
 process group is gone), not that cleanup ran.
 
 Justify every new line injected into a model prompt. Prefer one-line command
@@ -48,8 +55,8 @@ repeating them on every turn. Review the rendered prompt, not only its source.
 ## Validation
 
 See the [suite stages and environment](../develop.md#validation). Use targeted
-evidence by default; the full suite is reserved for an exact operator request
-or large/high-risk work.
+evidence by default. Large changes and high-risk labels alone do not justify
+running every suite; select checks for the behavior that can actually break.
 
 `tests/check.sh perf` runs the Linux real-server blocking-call trace and idle-thread
 CPU gates. It runs in `all`, not the routine individual PR stages; remove resolved
@@ -59,21 +66,22 @@ sites from the shrinking known-offender list rather than accepting new ones.
 and their negative controls. It runs in `all`, not `ts` or routine PR stages; the
 Linux x64 runner downloads pinned tools into private scratch space.
 
-UI, CSS or server-HTML changes run `tests/check.sh web` at the final head. Run new
-or changed tests alone first, then the browser test groups that own the changed
-feature (usually 1-3), not the whole suite unless the change is large or
-high-risk. Reviewers list the tests and browser groups the change could break
-and check that the evidence ran them. Before rerunning a failure you cannot
-explain, record the test, error, log, head SHA and time; never retry it away or
-call it a flake without that record.
+UI, CSS or server-HTML changes run the browser groups that cover the affected
+feature (usually 1-3). Use `tests/check.sh web` only when a named shared behavior
+requires that broader coverage. Run a new or changed test alone while debugging;
+after a group passes, do not also rerun its tests separately. Reviewers check
+evidence for the changed behavior, not unrelated groups. Before rerunning a
+failure you cannot explain, record the test, error, log, head SHA and time;
+never retry it away or call it a flake without that record.
 
-Prettier, TypeScript, `bun tests/checks/browser_import_check.ts`,
-`bun tests/checks/operator_send_check.ts` and `bun tests/checks/prompt_budget.ts`
-are mandatory quick checks. These scripts also run with the static checks in
-`tests/check.sh ts`. The operator-send check confines message delivery and
-foreground enqueueing to the shared send-scroll entry point. The prompt check renders
-a real fake-provider request with fixed dynamic inputs and prints section sizes;
-its [header](../../tests/checks/prompt_budget.ts) defines the measured prompt. Oxlint is advisory. Never commit `web/dist`. tests/check.sh
+Run Prettier on changed files and TypeScript for code changes. Run
+`bun tests/checks/browser_import_check.ts` for browser import changes,
+`bun tests/checks/operator_send_check.ts` for message delivery changes, and
+`bun tests/checks/prompt_budget.ts` for changes to generated prompt content or
+assembly. These scripts also run in `tests/check.sh ts`; do not repeat them
+separately if that stage already passed for the same behavior. The prompt check
+renders a real fake-provider request and prints section sizes; its
+[header](../../tests/checks/prompt_budget.ts) defines the measured prompt. Oxlint is advisory. Never commit `web/dist`. tests/check.sh
 defines source-size limits and exclusions; simplify large files by deleting dead,
 duplicated or parallel code and giving each module one
 job, not by mechanically splitting files.
