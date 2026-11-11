@@ -38,6 +38,17 @@ dismiss; Recurse does not infer delivery from Pi history or promise exactly-once
 delivery. See [runtime/agent_node.ts](runtime/agent_node.ts) and
 [reconciler.ts](reconciler.ts).
 
+## Verification guidance
+
+[runtime/prompts.ts](runtime/prompts.ts) asks agents to use the smallest relevant
+checks and stop when they pass. Repeated checks require a subsequent change or
+an actual failure. Broader suites, audits, benchmarks and review rounds require
+a concrete uncovered risk or explicit requirement, not confidence alone.
+Simple changes should take minutes to validate; expanding validation requires
+an explanation of its risk and expected cost. Required safety checks and project
+requirements remain in force. Recurse does not impose a test timeout or cancel
+running jobs to enforce this guidance.
+
 ## Lifecycle
 
 Stop, clear and compact have distinct ordering boundaries. Deletion fences

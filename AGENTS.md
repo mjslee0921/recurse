@@ -106,20 +106,25 @@ are authoritative.
 5. **Protected branches.** Never rewrite published PR branches. Branch from
    merged `main`, never from another PR; an operator-named integration branch's
    merged tip is the base and target of its workstream until promotion is
-   approved. Give commands, observed results, and required review verdicts at
-   the exact head SHA. Fix red tests, or prove with a commit that a failure is
-   unrelated and pre-existing.
+   approved. Record the tested commit and commands; reuse passing evidence when
+   later edits do not affect that behavior. Fix failures caused by the change;
+   report unrelated failures with existing baseline evidence, without expanding
+   the task to repair them.
 6. **Continuity.** PR descriptions, commits, headers, and tests must make sense
    without conversational context.
 
 ## Development and tests
 
 Before changing code or tests, read [the validation and test-writing
-workflow](docs/agents/develop.md#validation). Prettier and TypeScript checks are
-mandatory; Oxlint is advisory. Never commit `web/dist`.
+workflow](docs/agents/develop.md#validation). Run formatting on changed files
+and TypeScript checks for code changes; prompt-only and documentation changes
+need consistency checks, not test suites. Oxlint is advisory. Never commit `web/dist`.
 
-Use targeted evidence by default; reserve the full suite for an exact operator
-request or large/high-risk work. Never run tests/check.sh stages concurrently.
+Choose the smallest checks that cover the changed behavior, then stop once they
+pass. Broaden only for a named uncovered risk or explicit requirement; size alone
+is not a reason for the full suite. Do not create extra audits, benchmarks or
+review rounds for confidence alone. Preserve required safety checks. Never run
+tests/check.sh stages concurrently.
 Tests prove behaviour on real paths, not mocks or invented pure-function inputs.
 Changes to sending, running or showing a reply need a test that sends a message
 through the fake provider. Prefer fewer tests and extend integration tests.
