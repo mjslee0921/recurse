@@ -538,7 +538,7 @@ mark.report-cmark:hover { background: color-mix(in srgb, var(--highlight) 42%, t
 .mermaid-host.mermaid-error pre { overflow-x: auto; max-width: 100%; color: var(--text); }
 
 /* Display equations scroll inside narrow panes instead of widening the page. */
-.katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: .15em 0; }
+.katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: .35em 0; }
 
 /* Selection comments on agent text. Fixed controls stay beside the browser
    selection without changing the message layout. */

@@ -1524,6 +1524,13 @@ const routes: Record<string, (request: Request) => Promise<Json>> = {
     durableModel.set(body.agent, null);
     return { agent: body.agent };
   },
+  "seed-math": async (request) => {
+    const { reply } = (await request.json()) as { reply: string };
+    const agent = `math-${randomUUID()}`;
+    await createDurable(agent, "Math rendering", "fauxfast/faux-1");
+    durableFast.setResponses([fauxAssistantMessage(reply)]);
+    return { agent };
+  },
   "seed-durable": async () => {
     await createDurable("durable-demo", "Durable demo", "faux/faux-1");
     const held = new Promise<void>((resolve) => (durableGate = resolve));
