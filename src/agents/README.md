@@ -38,6 +38,37 @@ dismiss; Recurse does not infer delivery from Pi history or promise exactly-once
 delivery. See [runtime/agent_node.ts](runtime/agent_node.ts) and
 [reconciler.ts](reconciler.ts).
 
+## Completion guidance
+
+[runtime/prompts.ts](runtime/prompts.ts) supplies the shared completion policy:
+carry authorized work through implementation and relevant verification, preserve
+the active objective across steering and compaction, and continue independent
+work while answers or background tasks are pending. Existing authorization stays
+within its original scope; required approvals and safety review still apply.
+The policy discourages repeated successful checks without new evidence and asks
+for results, verification and concrete blockers at completion. It does not add
+a retry loop or infer task success from an assistant's final message.
+
+## Communication guidance
+
+[runtime/prompts.ts](runtime/prompts.ts) instructs agents to write replies,
+progress updates, inter-agent messages and pull requests in plain English
+sentences with normal spacing and punctuation, not joined words, compressed
+shorthand or unexplained abbreviations. Results and their meaning come first;
+necessary technical terms are explained, and exact paths and identifiers stay
+separate from the explanation.
+
+## Verification guidance
+
+[runtime/prompts.ts](runtime/prompts.ts) asks agents to use the smallest relevant
+checks and stop when they pass. Repeated checks require a subsequent change or
+an actual failure. Broader suites, audits, benchmarks and review rounds require
+a concrete uncovered risk or explicit requirement, not confidence alone.
+Simple changes should take minutes to validate; expanding validation requires
+an explanation of its risk and expected cost. Required safety checks and project
+requirements remain in force. Recurse does not impose a test timeout or cancel
+running jobs to enforce this guidance.
+
 ## Lifecycle
 
 Stop, clear and compact have distinct ordering boundaries. Deletion fences

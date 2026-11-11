@@ -11,6 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -49,7 +50,10 @@ function world(dataDir = mkdtempSync(join(root, "data-"))) {
 function hostOn(
   { dataDir, records }: ReturnType<typeof world>,
   responses: FauxResponseStep[],
-  report?: (cid: string, report: DurableReport) => Promise<"done" | "retry">,
+  report?: (
+    cid: string,
+    report: DurableReport,
+  ) => Promise<"done" | "retry" | "hold">,
   log?: (event: string, fields: Rec) => void,
 ) {
   const faux = fauxProvider({ tokensPerSecond: 20_000 });
@@ -812,6 +816,72 @@ test("a next-turn-only note is written without a run and reaches the next reques
 });
 
 describe("reports", () => {
+  // Regression: #1 Held earlier finals must survive later settled runs and retries.
+  test("held results are delivered in order across restart without replaying admitted runs", async () => {
+    const w = world();
+    const attempts: DurableReport[] = [];
+    const result =
+      "Implementation complete: revision abc123; tests pass.\n" +
+      "Detailed public result.\n".repeat(1500);
+    const a = hostOn(
+      w,
+      [fauxAssistantMessage(result), fauxAssistantMessage("Acknowledged.")],
+      async (_cid, report) => {
+        attempts.push(report);
+        return "hold";
+      },
+    );
+    await a.host.send("c1", "implement", "op:agent:parent:k1");
+    await until(idle(a.host));
+    await (await a.host.open("c1")).reporter!.kick();
+    const originalKey = attempts[0]!.key;
+    await a.host.send("c1", "acknowledge", "op:operator::k2");
+    await until(idle(a.host));
+    await (await a.host.open("c1")).reporter!.kick();
+    await a.host.close();
+    const admitted: DurableReport[] = [];
+    let retry = true;
+    const b = hostOn(w, [], async (_cid, report) => {
+      if (admitted.length === 1 && retry) return "retry";
+      admitted.push(report);
+      return "done";
+    });
+    try {
+      const opened = await b.host.open("c1");
+      await opened.reporter!.kick();
+      expect(admitted).toHaveLength(1);
+      const excerpt = admitted[0]!.finalText!;
+      expect(excerpt).toStartWith(
+        "Implementation complete: revision abc123; tests pass.",
+      );
+      expect(excerpt.length).toBeLessThan(25_000);
+      const transcript = join(
+        w.dataDir,
+        "conversations/c1/durable/transcript.txt",
+      );
+      expect(excerpt).toContain(transcript);
+      expect(excerpt).toContain("Durable entry");
+      await b.host.messageSearch.sync(b.host.searchTarget("c1"));
+      expect(await readFile(transcript, "utf8")).toContain(result.trim());
+      expect(admitted[0]!.key).toBe(originalKey);
+      retry = false;
+      await opened.reporter!.kick();
+      expect(admitted.map((report) => report.finalText)).toEqual([
+        excerpt,
+        "Acknowledged.",
+      ]);
+      expect(admitted.map((report) => report.more)).toEqual([true, false]);
+      expect(admitted.map((report) => report.requestId)).toEqual([
+        "op:agent:parent:k1",
+        "op:operator::k2",
+      ]);
+      await opened.reporter!.kick();
+      expect(admitted).toHaveLength(2);
+    } finally {
+      await b.host.close();
+    }
+  });
+
   test("each settled run is reported once, with its text, its trigger, and a stop", async () => {
     const reports: DurableReport[] = [];
     const first = heldAnswer("one");
@@ -842,6 +912,7 @@ describe("reports", () => {
             requestId: "op:operator::k1",
             received: ["op:agent:p1:k2"],
             earlier: 0,
+            more: false,
             queued: false,
             finalText: "two",
             aborted: false,
@@ -854,6 +925,7 @@ describe("reports", () => {
             requestId: "op:operator::k3",
             received: [],
             earlier: 0,
+            more: false,
             queued: false,
             finalText: "three",
             aborted: false,

@@ -41,6 +41,8 @@ export interface PromptSnapshot extends PromptResources {
   recurse_runtime: string;
   recurse_tree: string;
   recurse_tools: string;
+  /** Effective review state read by the host, never inferred from metadata. */
+  safety_review_off?: boolean;
   /** Pi's MCP extension section (mcp.ts mcpServersSection), when set. */
   mcp_servers?: string;
 }
@@ -94,7 +96,20 @@ export function renderPromptSections(
     cwd: cwd.replace(/\\/g, "/"),
     recurse_agent: state.recurse_agent,
     recurse_memory: state.recurse_memory,
-    recurse_runtime: state.recurse_runtime,
+    recurse_runtime: [
+      state.recurse_runtime,
+      ...(state.safety_review_off === undefined
+        ? []
+        : [
+            `- Safety review: ${state.safety_review_off ? "OFF" : "ON"} for this conversation.`,
+            ...(state.safety_review_off
+              ? [
+                  "- The operator disabled per-action tool review. Continue already-authorized work without asking again solely because review is off. This does not expand authorization, override prior denials or remove explicit approval requirements.",
+                ]
+              : []),
+            "- Other conversations have their own review setting; do not assume a parent's setting applies to its children.",
+          ]),
+    ].join("\n"),
     recurse_tree: state.recurse_tree,
     recurse_tools: state.recurse_tools,
     ...(state.mcp_servers ? { mcp_servers: state.mcp_servers } : {}),

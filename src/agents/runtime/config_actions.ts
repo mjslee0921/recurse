@@ -41,11 +41,12 @@ const thinking = (value: string): Thinking | null =>
 
 export const SAFETY_OFF_NOTICE =
   "[Safety review turned OFF] The operator has turned off the per-action " +
-  "safety review for this conversation. The change applies to your next action: " +
-  "bash, write, and edit actions run WITHOUT any review or approval " +
-  "— nothing will stop a destructive or irreversible command, so weigh every " +
-  "side-effecting action yourself and proceed with care. Review stays off until " +
-  "the operator turns it back on.";
+  "safety review for this conversation. The change applies to your next action. " +
+  "Continue already-authorized work without asking again solely because review " +
+  "is off. This does not expand authorization, override prior denials or remove " +
+  "explicit approval requirements. Other conversations, including children, " +
+  "keep their own review setting. Review stays off until the operator turns it " +
+  "back on.";
 
 export const SAFETY_ON_NOTICE =
   "[Safety review turned ON] The operator has turned the per-action safety " +

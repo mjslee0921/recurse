@@ -133,6 +133,144 @@ const shellTasks = async (harness: Harness) =>
     (task) => task.record.kind === SHELL_TASK,
   );
 
+// Regression: #1 Full quotas preserve foreground completion and abort.
+test("a foreground command completes while the background quota stays full", async () => {
+  const { harness, conversation, shells } = await openShellHarness(
+    new MemoryStorage(),
+    {
+      cwd: root,
+      config: { ...config(), foregroundWaitMs: 50, maxLiveShells: 1 },
+    },
+  );
+  try {
+    const releaseSlot = join(root, "quota-release-slot");
+    const started = await run(
+      conversation,
+      {
+        command: `while [ ! -f ${releaseSlot} ]; do sleep 0.01; done; echo slot-released`,
+        background: true,
+      },
+      "occupy-slot",
+    );
+    const pgid = pgidOf(started);
+    const refused = await run(
+      conversation,
+      { command: "echo must-not-launch", background: true },
+      "over-quota",
+    );
+    expect(refused).toContain("Live background-shell limit reached (1/1)");
+    const output = await run(
+      conversation,
+      { command: "sleep 0.3; echo foreground-finished" },
+      "foreground-at-cap",
+    );
+    expect(output).toBe("foreground-finished\n");
+    expect(started).toContain("Continue useful independent work");
+    expect(groupMembers(pgid).length).toBeGreaterThan(0);
+    expect(await shellTasks(harness)).toHaveLength(1);
+    const pidFile = join(root, "quota-foreground-pid");
+    const activeFile = join(root, "quota-foreground-active");
+    const pending = await conversation.submit(
+      {
+        type: "input",
+        content: `RUN ${JSON.stringify({ command: `echo $$ > ${pidFile}; sleep 0.2; touch ${activeFile}; sleep 30` })}`,
+        requestId: "abort-at-cap",
+      },
+      context,
+    );
+    await until(() => {
+      try {
+        return readFileSync(activeFile, "utf8") === "";
+      } catch {
+        return false;
+      }
+    }, "quota-blocked foreground to remain active past its window");
+    const foregroundPgid = Number(readFileSync(pidFile, "utf8").trim());
+    await conversation.abort(context);
+    expect((await pending.wait(context)).status).toBe("unanswered");
+    await until(
+      () => groupMembers(foregroundPgid).length === 0,
+      "quota-blocked foreground group to stop",
+    );
+    expect(groupMembers(pgid).length).toBeGreaterThan(0);
+    const waitingFile = join(root, "quota-awaiting-slot");
+    const finishFile = join(root, "quota-detached-finish");
+    const handoff = run(
+      conversation,
+      {
+        command: `sleep 0.2; touch ${waitingFile}; while [ ! -f ${finishFile} ]; do sleep 0.01; done; echo detached-finished`,
+      },
+      "detach-after-release",
+    );
+    await until(() => {
+      try {
+        return readFileSync(waitingFile, "utf8") === "";
+      } catch {
+        return false;
+      }
+    }, "second quota-blocked foreground to pass its window");
+    expect(groupMembers(pgid).length).toBeGreaterThan(0);
+    writeFileSync(releaseSlot, "");
+    const detached = await handoff;
+    expect(detached).toContain("backgrounded as shell");
+    const detachedId = /shell `([^`]+)`/.exec(detached)![1]!;
+    const detachedPgid = pgidOf(detached);
+    expect(groupMembers(detachedPgid).length).toBeGreaterThan(0);
+    await until(async () => {
+      const tasks = await shellTasks(harness);
+      return (
+        tasks.length === 1 &&
+        (tasks[0]!.record.input as { shellId: string }).shellId === detachedId
+      );
+    }, "released slot to belong only to the newly detached command");
+    writeFileSync(finishFile, "");
+    await until(
+      async () =>
+        (await userTexts(conversation)).some(
+          (text) =>
+            text.includes(`Shell \`${detachedId}\``) &&
+            text.includes("detached-finished") &&
+            text.includes("exited 0"),
+        ),
+      "detached command completion notification",
+    );
+    await until(
+      async () =>
+        groupMembers(detachedPgid).length === 0 &&
+        (await shellTasks(harness)).length === 0,
+      "detached completion to release ownership and its process group",
+    );
+  } finally {
+    await harness.close(context);
+    await shells.shutdown();
+  }
+});
+
+// Regression: #1 Long lines retain suffixes and full-log recovery.
+test("a foreground long line keeps its tail and full-log recovery hint", async () => {
+  const { harness, conversation, shells } = await openShellHarness(
+    new MemoryStorage(),
+    { cwd: root, config: config() },
+  );
+  try {
+    const line = `begin-${"x".repeat(1000)}-important-suffix`;
+    const output = await run(
+      conversation,
+      { command: `printf %s ${JSON.stringify(line)}` },
+      "long-line",
+    );
+    expect(output).toContain("begin-");
+    expect(output).toContain("-important-suffix");
+    expect(output).toContain("full log:");
+    expect(output).toContain("Read offset=1");
+    const log = /full log: (.+?) —/.exec(output)![1]!;
+    expect(readFileSync(log, "utf8")).toBe(line);
+  } finally {
+    await harness.close(context);
+    await shells.shutdown();
+  }
+});
+
 // Regression: #3037 Record commits must retain immediate shell completions.
 test("a background completion wakes the idle conversation exactly once", async () => {
   const { harness, conversation, shells } = await openShellHarness(
@@ -592,6 +730,7 @@ test("a reap-style abort stops background shells", async () => {
   await shells.shutdown();
 });
 
+// Regression: #1 Restart recovery warns to inspect effects before retry.
 test("a resumed shell task verifies the recorded identity: a reused pid is never signaled", async () => {
   const db = join(root, "identity.sqlite");
   const first = await openShellHarness(
@@ -663,6 +802,11 @@ test("a resumed shell task verifies the recorded identity: a reused pid is never
     "both lost notices",
   );
   const lost = await restarted();
+  for (const notice of lost) {
+    expect(notice).toContain("Log:");
+    expect(notice).toContain("Read the log and check the command's effects");
+    expect(notice).toContain("Do not retry blindly");
+  }
   expect(lost.every((text) => !text.includes("could not be proven gone"))).toBe(
     true,
   );

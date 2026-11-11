@@ -83,16 +83,36 @@ the archive index closes.
 
 A settled subagent run is reported to its parent. A report is held while the
 child or a local descendant works or owes a report; when holders stop, held
-reports are rechecked. The report cursor advances only after delivery or drop.
+reports are rechecked. Every undelivered settled run keeps its own report and
+stable delivery key, in submission order; a later acknowledgment never replaces
+an earlier result. Inputs placed by the same task remain one run, with their
+original trigger and received-message provenance. The cursor checkpoints each
+run only after delivery or drop, so a retry does not replay an admitted earlier
+run. Earlier preserved reports do not emit finish notifications; only the final
+report does. Reads use 100-submission pages and retain one run at a time; each pass
+checkpoints at most 32 runs before continuing. Pending-input queries inspect
+only queued or placed submissions, not settled history. Final text and error
+excerpts are capped at 24,000 characters each and point to the child's full
+transcript and Durable entry when shortened. A run's received request IDs remain
+intact for provenance counts.
 Its tiny latest-only document stores a complete snapshot on each advance, so
 opening it does not replay all earlier cursor updates. Generation and delivery
-position are unchanged. An existing delta chain is discarded on its next advance;
+position keep the same format. An existing delta chain is discarded on its next advance;
 there is no per-open migration or historical scan.
 
 ## Prompts and context
 
 Prompt resources and Recurse sections form the model's system context.
 Tool instructions resolve asynchronously before the detached snapshot is rendered.
+The host reads each requesting conversation's effective safety-review setting
+from its Durable document at every request boundary and includes it in the
+runtime section. Neither parent settings, conversation metadata nor tool
+environment values determine that status. Turning review off removes per-action
+review only in that conversation: it does not expand task authorization, override
+prior denials or explicit approval requirements, or disable a child's review.
+The toggle notice and persistent context tell the agent to continue already-
+authorized work without asking again solely because review is off. Tool review
+enforcement and authenticated toggle ownership are unchanged.
 Changes are applied at request boundaries, and
 [request_capture.ts](request_capture.ts) records the exact request for the
 inspector. One lazy host-owned Worker serializes captured requests, including

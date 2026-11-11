@@ -668,10 +668,10 @@ export async function buildInstance(options: InstanceOptions) {
     operatorMessageAdmitted: (cid, at) => {
       conversations.saveActivity(cid, at, at);
     },
-    // Invariant: Top-level and taken-over agents notify once per reported run
-    // key in this process, with nothing running or queued, no owned live shells
-    // (including monitors), and no working descendants. Like reports, a crash
-    // before the cursor advance may repeat one.
+    // Invariant: Top-level and taken-over agents notify once for the latest
+    // reported run key in this process, with nothing running or queued, no
+    // owned live shells (including monitors), and no working descendants.
+    // A crash before the cursor advance may repeat one.
     report: async (cid, report) => {
       conversationPrs.refresh(cid, "run_end");
       // Invariant: The stamp is flushed before the report cursor advances, so
@@ -681,6 +681,7 @@ export async function buildInstance(options: InstanceOptions) {
       const row = conversations.metadataSnapshot(cid);
       if (
         outcome === "done" &&
+        !report.more &&
         !report.queued &&
         notifiedRuns.get(cid) !== report.key &&
         row !== null &&

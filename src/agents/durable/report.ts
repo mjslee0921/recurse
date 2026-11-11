@@ -1,13 +1,14 @@
-// Report the latest settled trigger/outcome from stored submissions/entries.
-// Advance only after parent admission/drop; retries reuse keys and holds keep
-// the cursor (delivery.ts). Stale/withdrawn inputs report nothing. Each advance
-// checkpoints latest-only state so later reads do not replay earlier advances.
+// Report every settled run from stored submissions/entries in bounded pages.
+// Advance after each parent admission/drop; retries reuse keys and holds keep
+// the cursor (delivery.ts). Stale/withdrawn inputs report nothing. Oversized
+// finals retain a transcript pointer; cursor hydration stays latest-only.
 import { randomBytes } from "node:crypto";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import {
   defineDoc,
   type CommitPublication,
   type Conversation,
+  type Cursor,
   type EntryId,
   type Harness,
   type SubmissionRecord,
@@ -46,8 +47,10 @@ export interface DurableReport {
   requestId: string | undefined;
   /** Request ids of the other inputs the reported runs placed. */
   received: (string | undefined)[];
-  /** How many earlier settled runs this report replaces. */
+  /** Earlier settled runs replaced by this report (zero for new reports). */
   earlier: number;
+  /** Later runs await reporting; this is not the final finish notice. */
+  more: boolean;
   /** An input after these runs is still unsettled (it will start a run). */
   queued: boolean;
   finalText: string | null;
@@ -62,6 +65,7 @@ export interface ReporterDeps {
   harness: Harness;
   conversation: Conversation;
   storage: SqliteStorage;
+  transcriptPath: string;
   deliver(report: DurableReport): Promise<ReportOutcome>;
   log(event: string, fields: Record<string, unknown>): void;
   /** Called after a pass that reported every settled run. */
@@ -72,6 +76,8 @@ export interface ReporterDeps {
 
 const RETRY_FIRST_MS = 1000;
 const RETRY_MAX_MS = 60_000;
+const REPORT_TEXT_LIMIT = 24_000;
+const RUNS_PER_PASS = 32;
 
 type Settled = SubmissionRecord & { status: "done" | "unanswered" };
 
@@ -202,6 +208,72 @@ export class Reporter {
     };
   }
 
+  private reportText(text: string | null, answer: unknown): string | null {
+    if (text === null || text.length <= REPORT_TEXT_LIMIT) return text;
+    return `${text.slice(0, REPORT_TEXT_LIMIT)}\n\n[Result excerpt; full result: ${this.deps.transcriptPath} (Durable entry ${answer}).]`;
+  }
+
+  private async deliverRun(
+    run: Settled[],
+    generation: string,
+    queued: boolean,
+    more: boolean,
+  ): Promise<boolean> {
+    if (this.closed) return false;
+    if (run[0]!.entry === undefined) return true;
+    const [first, last] = [run[0]!, run.at(-1)!];
+    const key = `r-${this.deps.child}-${generation}-${Number(first.id)}`;
+    let outcome: ReportOutcome;
+    try {
+      outcome = await this.deps.deliver({
+        key,
+        requestId: first.requestId,
+        received: run
+          .slice(1)
+          .filter((input) => input.entry !== undefined)
+          .map((input) => input.requestId),
+        earlier: 0,
+        more,
+        queued,
+        finalText:
+          last.status === "done"
+            ? this.reportText(
+                (await this.entry(Number(last.answer))).text,
+                last.answer,
+              )
+            : null,
+        aborted: last.status === "unanswered" && last.reason === "aborted",
+        error: this.reportText(runError(last), last.entry),
+      });
+    } catch (error) {
+      this.deps.log("durable_report_failed", {
+        cid: this.deps.child,
+        error: String(error),
+      });
+      outcome = "retry";
+    }
+    if (outcome === "retry") {
+      this.retryLater();
+      return false;
+    }
+    if (outcome === "hold") {
+      this.deps.holds?.hold(this);
+      if (this.held?.key !== key) {
+        this.held = { key, since: Date.now() };
+        this.deps.log("durable_report_held", { cid: this.deps.child, key });
+      }
+      return false;
+    }
+    const held = this.held && { held_ms: Date.now() - this.held.since };
+    this.held = undefined;
+    this.deps.log("durable_report_delivered", {
+      cid: this.deps.child,
+      key,
+      ...held,
+    });
+    return true;
+  }
+
   private async pass(): Promise<void> {
     const { harness, conversation, storage } = this.deps;
     const seen = this.settledCommits;
@@ -209,10 +281,27 @@ export class Reporter {
     const generation = doc?.generation ?? "";
     const after = doc?.after ?? -1;
 
-    const inputs: SubmissionRecord[] = [];
+    this.caughtUp = false;
+    let queued = false;
+    for (const status of ["queued", "placed"] as const) {
+      let cursor: Cursor | undefined = { after };
+      do {
+        const page = await storage.scanSubmissions(
+          { conversationId: conversation.id, status },
+          100,
+          cursor,
+          context,
+        );
+        queued ||= page.items.some((record) => record.type === "input");
+        cursor = page.next;
+      } while (cursor !== undefined && !queued);
+      if (queued) break;
+    }
     let at = after;
+    let run: Settled[] = [];
+    let delivered = 0;
     let blocked = false;
-    for (let more = true; more && !blocked; ) {
+    for (let more = true; more && !blocked && !this.closed; ) {
       const page = await storage.scanSubmissions(
         { conversationId: conversation.id },
         100,
@@ -221,89 +310,47 @@ export class Reporter {
       );
       more = page.next !== undefined;
       for (const record of page.items) {
-        if (record.type === "write") {
-          if (!blocked) at = Number(record.id);
+        if (
+          record.type === "write" ||
+          (settled(record) && record.entry === undefined)
+        ) {
+          at = Number(record.id);
           continue;
         }
-        inputs.push(record);
+        if (!settled(record)) queued = true;
+        const continuation =
+          record.entry !== undefined &&
+          (await this.entry(Number(record.entry))).byTask;
+        if (run.length && !continuation) {
+          if (!(await this.deliverRun(run, generation, queued, true))) return;
+          if (this.closed) return;
+          await this.advance(at);
+          run = [];
+          if (++delivered >= RUNS_PER_PASS) {
+            this.again = true;
+            return;
+          }
+        }
         if (!settled(record)) {
           blocked = true;
           break;
         }
+        run.push(record);
         at = Number(record.id);
       }
     }
-    this.caughtUp = false;
-    const placedByTask = async (record: SubmissionRecord | undefined) =>
-      record?.entry !== undefined &&
-      (await this.entry(Number(record.entry))).byTask;
-    const runs: Settled[][] = [];
-    let complete = true;
-    for (let i = 0; i < inputs.length; ) {
-      if (!settled(inputs[i]!)) break;
-      let end = i + 1;
-      while (end < inputs.length && (await placedByTask(inputs[end]))) end += 1;
-      const run = inputs.slice(i, end);
-      if (!run.every(settled)) {
-        complete = false;
-        break;
-      }
-      runs.push(run);
-      i = end;
-    }
     if (this.closed) return;
-    // Invariant: Only the latest reported run's text reaches the parent; the
-    // earlier ones are counted, and their key is never used again.
-    const reported = runs.filter((run) => run[0]!.entry !== undefined);
-    const latest = reported.at(-1);
-    if (latest !== undefined) {
-      const [first, last] = [latest[0]!, latest.at(-1)!];
-      const key = `r-${this.deps.child}-${generation}-${Number(first.id)}`;
-      let outcome: ReportOutcome;
-      try {
-        outcome = await this.deps.deliver({
-          key,
-          requestId: first.requestId,
-          received: reported
-            .flat()
-            .filter((input) => input !== first && input.entry !== undefined)
-            .map((input) => input.requestId),
-          earlier: reported.length - 1,
-          queued: blocked,
-          finalText:
-            last.status === "done"
-              ? (await this.entry(Number(last.answer))).text
-              : null,
-          aborted: last.status === "unanswered" && last.reason === "aborted",
-          error: runError(last),
-        });
-      } catch (error) {
-        this.deps.log("durable_report_failed", {
-          cid: this.deps.child,
-          error: String(error),
-        });
-        outcome = "retry";
-      }
-      if (outcome === "retry") return this.retryLater();
-      if (outcome === "hold") {
-        this.deps.holds?.hold(this);
-        if (this.held?.key !== key) {
-          this.held = { key, since: Date.now() };
-          this.deps.log("durable_report_held", { cid: this.deps.child, key });
-        }
+    if (!blocked) {
+      if (
+        run.length &&
+        !(await this.deliverRun(run, generation, queued, false))
+      )
         return;
-      }
-      const held = this.held && { held_ms: Date.now() - this.held.since };
-      this.held = undefined;
-      this.deps.log("durable_report_delivered", {
-        cid: this.deps.child,
-        key,
-        ...held,
-      });
+      if (at > after && !this.closed) await this.advance(at);
+    } else if (!run.length && at > after && !this.closed) {
+      await this.advance(at);
     }
     this.delay = RETRY_FIRST_MS;
-    const end = complete ? at : Number(runs.at(-1)?.at(-1)?.id ?? after);
-    if (end > after && !this.closed) await this.advance(end);
     this.caughtUp = !this.closed && seen === this.settledCommits;
     if (!this.caughtUp) return;
     this.deps.onCaughtUp?.();

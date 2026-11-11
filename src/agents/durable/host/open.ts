@@ -541,6 +541,13 @@ function handle(
           harness,
           conversation,
           storage,
+          transcriptPath: join(
+            host.deps.dataDir,
+            "conversations",
+            cid,
+            "durable",
+            "transcript.txt",
+          ),
           deliver: (report) => deliver(cid, report),
           log: (event, fields) => host.deps.log(event, fields),
           onCaughtUp: () => void host.maybeRotate(cid, true),

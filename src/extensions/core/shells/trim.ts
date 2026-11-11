@@ -63,10 +63,12 @@ export function byteTruncationMarker(
   return `... ~${omittedBytes} bytes truncated${loc} — Read offset=${headLines + 1} limit=${limit} to continue`;
 }
 
-// Truncate by Unicode code point, adding the dropped-character count.
+// Retain both ends by Unicode code point and identify the original log line.
 function truncateLine(
   line: string,
   maxLineLen: number,
+  logPath: string | undefined,
+  lineNumber: number,
 ): { line: string; truncated: boolean } {
   if (line.length <= maxLineLen && byteLen(line) <= maxLineLen) {
     return { line, truncated: false };
@@ -76,9 +78,13 @@ function truncateLine(
     return { line, truncated: false };
   }
   const dropped = chars.length - maxLineLen;
-  const kept = chars.slice(0, maxLineLen).join("");
+  const head = chars.slice(0, Math.ceil(maxLineLen / 2)).join("");
+  const tail = chars.slice(-Math.floor(maxLineLen / 2)).join("");
+  const recovery = logPath
+    ? ` — full log: ${logPath} — Read offset=${lineNumber} limit=1 for the full line`
+    : "";
   return {
-    line: `${kept} … line truncated (${dropped} chars)`,
+    line: `${head} … line truncated (${dropped} chars) … ${tail}${recovery}`,
     truncated: true,
   };
 }
@@ -141,8 +147,8 @@ export function trimOutput(
 
   const rawLines = text.split("\n");
   let anyLineTruncated = false;
-  const lines = rawLines.map((l) => {
-    const r = truncateLine(l, maxLineLen);
+  const lines = rawLines.map((l, index) => {
+    const r = truncateLine(l, maxLineLen, logPath, index + 1);
     if (r.truncated) anyLineTruncated = true;
     return r.line;
   });
