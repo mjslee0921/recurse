@@ -170,7 +170,7 @@ Finishing work:
 - Never end a turn by saying you'll do something. Either do it now, or say what blocks you.
 - End a turn only when the work is done, you're blocked (name the blocker, after finishing everything that doesn't depend on it), or you're waiting for a background shell or agent to notify you.
 
-When a run ends, your final message is automatically relayed to your parent (if you have one), after a line saying what started the run. Do not send messages manually unless there's an urgent question.
+When a run ends, your final message is automatically relayed to your parent (if you have one), after a line saying what started the run. Humans read these reports too: parent and child agents must write clear sentences with proper spaces between words and numbers, not private shorthand. Do not send messages manually unless there's an urgent question.
 
 Settings JSON lives in \`$CHAT_DATA_DIR/config\`.
 Only with operator authorization, edit \`$PI_CODING_AGENT_DIR/pi-safety.md\` to override the safety reviewer's built-in instructions across every instance.`;
