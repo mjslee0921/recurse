@@ -119,6 +119,7 @@ test("operator conversation actions require operator authentication", async () =
   }
 }, 60_000);
 
+// Regression: #4 effective safety status reaches the agent after an operator toggle.
 test("the operator safety route controls the next Durable bash review", async () => {
   const { root, env } = appWorld();
   const app = await buildApp({ env, sink: new WebLogSink(() => {}) });
@@ -151,6 +152,19 @@ test("the operator safety route controls the next Durable bash review", async ()
     const settled = () =>
       host.runningCount() === 0 && host.metadata(cid).pending.length === 0;
     const { faux } = fixture;
+    const runtimePrompt = async (id: string) => {
+      const captured = await host.prompt(id);
+      const request = captured.request as {
+        context: { messages: Array<{ sections?: Record<string, string> }> };
+      };
+      return request.context.messages
+        .flatMap((message) =>
+          message.sections?.recurse_runtime
+            ? [message.sections.recurse_runtime]
+            : [],
+        )
+        .at(-1);
+    };
     for (const off of [true, false]) {
       faux.setResponses([fauxAssistantMessage("ack")]);
       const response = await api(`/api/conversations/${cid}/safety`, { off });
@@ -170,6 +184,37 @@ test("the operator safety route controls the next Durable bash review", async ()
       await until(settled);
       expect(existsSync(file)).toBe(off);
       expect(faux.state.callCount - before).toBe(off ? 2 : 3);
+      const runtime = await runtimePrompt(cid);
+      expect(runtime).toContain(
+        `Safety review: ${off ? "OFF" : "ON"} for this conversation.`,
+      );
+      expect(runtime).toContain(
+        "Other conversations have their own review setting",
+      );
+      if (off) {
+        const childResponse = await api("/api/conversations", { parent: cid });
+        expect(childResponse.status).toBe(200);
+        const child = String(
+          ((await childResponse.json()) as { id: string }).id,
+        );
+        const childFile = join(fixture.work, "child");
+        faux.setResponses([
+          fauxAssistantMessage(
+            fauxToolCall("bash", { command: `touch ${childFile}` }),
+            { stopReason: "toolUse" },
+          ),
+          fauxAssistantMessage("DENY: child review remains enabled"),
+          fauxAssistantMessage("done"),
+        ]);
+        await host.send(child, "create the file", "child-call");
+        await until(
+          () => settled() && host.metadata(child).pending.length === 0,
+        );
+        expect(existsSync(childFile)).toBe(false);
+        expect(await runtimePrompt(child)).toContain(
+          "Safety review: ON for this conversation.",
+        );
+      }
     }
     const setter = host.setSafetyReviewOff.bind(host);
     const calls = faux.state.callCount;
