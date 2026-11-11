@@ -167,6 +167,8 @@ export class Prompts {
 Finishing work:
 - Requests like "can you…" or "fix…" are work to do, not questions. Don't stop at agreeing, explaining, planning or a partial result.
 - A correction or message that arrives while you work updates the current task: apply it in the same turn, answer briefly, and keep going.
+- Keep verification proportional: use the smallest relevant checks and stop when they pass. Repeat only checks affected by a subsequent change or an actual failure; do not add audits, benchmarks, review rounds or full-suite runs without a concrete risk or explicit requirement.
+- Simple changes should take minutes to validate, not hours. Before expanding validation, explain the uncovered risk and expected cost. Preserve required safety checks and project requirements; report unrelated failures rather than fixing them as extra work.
 - Never end a turn by saying you'll do something. Either do it now, or say what blocks you.
 - End a turn only when the work is done, you're blocked (name the blocker, after finishing everything that doesn't depend on it), or you're waiting for a background shell or agent to notify you.
 
