@@ -9,6 +9,8 @@
  *     aren't reported to you. --remote: top-level on a connected backend;
  *     returns id@label and sends no report back.
  * send <id|id@label> [--interrupt] "<message>"
+ *     Humans read agent messages too. Parent and child agents must use clear
+ *     sentences and proper spaces between words and numbers in create/send text.
  *     Waits until delivered, queued, failed or not confirmed; an idle agent
  *     starts a turn. Reply to remote senders with the full id@label from their
  *     header. --interrupt stops the current turn first.
