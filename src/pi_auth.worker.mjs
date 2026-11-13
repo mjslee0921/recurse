@@ -8,8 +8,9 @@ import { chmodSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import readline from "node:readline";
+import { withSupplementalModels } from "./pi_supplemental_models.ts";
 
-const EXPECTED_PI_VERSION = "1.5.0";
+const EXPECTED_PI_VERSION = "1.5.2";
 const ANTHROPIC_OAUTH_MODULE = new URL(
 	"./auth/anthropic_oauth.ts", import.meta.url).href;
 const MAX_INPUT_CHARS = 64 * 1024;
@@ -173,12 +174,15 @@ async function makeRuntime(imported, authPath) {
 	// Invariant: Static catalogs only: the worker never refreshes model
 	// availability over the network, and getAuth still refreshes/persists OAuth
 	// through the normal request-auth path.
-	return imported.ModelRuntime.create({
+	const runtime = await imported.ModelRuntime.create({
 		authPath,
 		modelsPath: modelsPathFor(authPath),
 		allowModelNetwork: false,
 		refreshOnCreate: false,
 	});
+	const anthropic = runtime.getProvider("anthropic");
+	if (anthropic) runtime.registerNativeProvider(withSupplementalModels(anthropic));
+	return runtime;
 }
 
 const THINKING_LEVEL_NAMES = new Set([

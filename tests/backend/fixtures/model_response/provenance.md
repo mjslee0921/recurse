@@ -7,3 +7,11 @@ ETag was `"95a2e44a856349a2e4505efd9edc3494"`. The provider-keyed envelope,
 `models`, `lastModified`, `checkedAt`, and `etag` match Pi's FileModelsStore
 format. Other models are omitted. The regression test changes only the base URL
 to replay sanitized recorded provider bytes over loopback.
+
+`fable-5-2.json` is the complete `claude-fable-5-2` entry downloaded from
+`https://pi.dev/api/models/providers/anthropic` on 2026-11-13. The supplemental
+Mythos test uses this metadata unchanged as its source. Anthropic's
+[Mythos overview](https://platform.claude.com/docs/en/models/mythos-5-2/overview)
+states that Mythos 5.2 is Fable 5.2 for verified organizations, with the same
+specifications and pricing. The supplemental entry omits Fable's optional
+fallback-model permission; listing a model does not guarantee account access.

@@ -27,6 +27,7 @@ import {
   withRemoteCatalog,
 } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/remote-catalog-provider.js";
 import { join } from "node:path";
+import { withSupplementalModels } from "../../pi_supplemental_models";
 
 /** No environment variables and no ambient credential files. */
 export const STORED_CREDENTIALS_ONLY: AuthContext = {
@@ -122,7 +123,9 @@ export function durableModels(piAgentDir: string): MutableModels {
               generatedAt,
             )
           : withRemoteCatalog(provider, undefined, generatedAt);
-    models.setProvider(withRecurseAnthropicRefresh(catalog));
+    models.setProvider(
+      withRecurseAnthropicRefresh(withSupplementalModels(catalog)),
+    );
   }
   return models;
 }

@@ -134,7 +134,13 @@ codemode usage in the tool description and list only non-deferred script-only
 tool names in the codemode section, without schemas. Discovery is unchanged. Message provenance is separate from user text
 ([../runtime/prompt_stamp.ts](../runtime/prompt_stamp.ts)).
 [models.ts](models.ts) and [model_selection.ts](model_selection.ts) resolve
-models; Settings owns credentials. Pi's credential store defers its first read
+models; Settings owns credentials. The shared
+[supplemental catalog](../../pi_supplemental_models.ts) adds Mythos 5.2 only when
+Pi has Fable 5.2 metadata but no Mythos entry. It uses Fable's documented matching
+specifications without granting fallback-model permissions. Both Durable and the
+Settings worker apply this view after catalog refreshes; upstream Mythos metadata
+wins automatically. Pi 1.5.2 supplies the Anthropic client version required by
+these models. Pi's credential store defers its first read
 until an asynchronous auth operation. Credential and stored-catalog revision
 checks, locked reads and writes use asynchronous filesystem calls, preserving
 Pi's cross-process locking and external Settings-update visibility. The

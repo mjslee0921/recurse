@@ -218,15 +218,9 @@ diff --git a/dist/storage/sqlite/storage.js b/dist/storage/sqlite/storage.js
 index 890f1428f8855e05f18007ab3ca70218a7a32ef8..8ace074d8abfa0f1be4baf012290f54166f6d1e7 100644
 --- a/dist/storage/sqlite/storage.js
 +++ b/dist/storage/sqlite/storage.js
-@@ -2,7 +2,7 @@ import { apply } from "@earendil-works/chord/delta";
- import { StorageRequestError } from "../../errors.js";
- import { idFromNumber, seqFromNumber } from "../../ids.js";
- import { nextCursor, scanStart } from "../scan.js";
+@@ -6,1 +6,1 @@
 -import { applySqliteMigrationsForSchema } from "./migrations.js";
 +import { applySqliteMigrationsForSchema, CURRENT_SQLITE_SCHEMA_VERSION } from "./migrations.js";
- import { createSqliteSchema } from "./schema.js";
- const parseJson = (value) => JSON.parse(value);
- const encodeJson = (value) => JSON.stringify(value);
 @@ -110,7 +110,15 @@ export class SqliteStorage {
      static async open(db, options = {}) {
          try {
