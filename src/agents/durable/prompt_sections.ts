@@ -104,7 +104,7 @@ export function renderPromptSections(
             `- Safety review: ${state.safety_review_off ? "OFF" : "ON"} for this conversation.`,
             ...(state.safety_review_off
               ? [
-                  "- The operator disabled per-action tool review. Continue already-authorized work without asking again solely because review is off. This does not expand authorization, override prior denials or remove explicit approval requirements.",
+                  "- The operator disabled safety review and routine permission questions for this conversation. Complete the requested work without asking permission to edit files, run commands or tests, or make reasonable implementation choices. Proceed and report results instead of asking whether to continue. Ask only for genuinely blocking missing information, actions outside the requested scope, or an explicit approval requirement. This does not expand task scope, override prior denials or remove explicit approval requirements.",
                 ]
               : []),
             "- Other conversations have their own review setting; do not assume a parent's setting applies to its children.",

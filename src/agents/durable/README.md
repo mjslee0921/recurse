@@ -108,11 +108,16 @@ The host reads each requesting conversation's effective safety-review setting
 from its Durable document at every request boundary and includes it in the
 runtime section. Neither parent settings, conversation metadata nor tool
 environment values determine that status. Turning review off removes per-action
-review only in that conversation: it does not expand task authorization, override
-prior denials or explicit approval requirements, or disable a child's review.
-The toggle notice and persistent context tell the agent to continue already-
-authorized work without asking again solely because review is off. Tool review
-enforcement and authenticated toggle ownership are unchanged.
+review and instructs the assistant not to ask routine permission questions in that
+conversation. Both the toggle notice and persistent context direct it to edit,
+run commands and tests, and make reasonable implementation choices to complete
+the requested work without asking whether to continue. Questions remain appropriate
+for genuinely blocking missing information, actions outside the requested scope,
+or explicit approval requirements. This does not expand task scope, override prior
+denials or explicit approval requirements, or disable a child's review. The
+no-routine-permission behavior is model guidance, not a filter that suppresses
+assistant messages. Tool review enforcement and authenticated toggle ownership
+are unchanged.
 Changes are applied at request boundaries, and
 [request_capture.ts](request_capture.ts) records the exact request for the
 inspector. One lazy host-owned Worker serializes captured requests, including

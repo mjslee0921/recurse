@@ -119,7 +119,7 @@ test("operator conversation actions require operator authentication", async () =
   }
 }, 60_000);
 
-// Regression: #4 effective safety status reaches the agent after an operator toggle.
+// Regression: #4, #8 operator toggles update effective safety status and permission guidance.
 test("the operator safety route controls the next Durable bash review", async () => {
   const { root, env } = appWorld();
   const app = await buildApp({ env, sink: new WebLogSink(() => {}) });
@@ -191,7 +191,15 @@ test("the operator safety route controls the next Durable bash review", async ()
       expect(runtime).toContain(
         "Other conversations have their own review setting",
       );
+      expect(runtime?.includes("routine permission questions")).toBe(off);
       if (off) {
+        expect(runtime).toContain(
+          "Complete the requested work without asking permission to edit files, run commands or tests",
+        );
+        expect(runtime).toContain(
+          "Ask only for genuinely blocking missing information, actions outside the requested scope, or an explicit approval requirement.",
+        );
+        expect(runtime).toContain("override prior denials");
         const childResponse = await api("/api/conversations", { parent: cid });
         expect(childResponse.status).toBe(200);
         const child = String(
